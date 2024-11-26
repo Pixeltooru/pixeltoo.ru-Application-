@@ -1,0 +1,5 @@
+keyboard==0.13.5
+paho-mqtt==1.6.1
+pygetwindow==0.0.9
+pycaw==20211023
+comtypes==1.1.14
