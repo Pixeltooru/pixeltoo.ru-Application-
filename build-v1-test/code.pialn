@@ -1,0 +1,177 @@
+import keyboard
+import paho.mqtt.client as mqtt
+import os
+import time
+import pygetwindow as gw
+from ctypes import windll
+from pycaw.pycaw import AudioUtilities, ISimpleAudioVolume
+import comtypes
+import tkinter as tk
+from tkinter import Scrollbar, Text, END
+from pystray import Icon, MenuItem, Menu
+from PIL import Image, ImageDraw
+
+# Конфигурация подключения
+BROKER = "192.168.1.109"  # Замените на IP вашего брокера
+PORT = 1883
+CLIENT_ID = "PC_Client"
+USERNAME = "user"
+PASSWORD = "passwd"
+
+MQTT_DEVICE_ID = "pc_device_001"
+SWITCH_SHUTDOWN_ID = "switch_pc_shutdown"
+SWITCH_SLEEP_ID = "switch_pc_sleep"
+SWITCH_WAKE_UP_ID = "switch_pc_wake_up"
+SENSOR_ACTIVE_WINDOW_ID = "sensor_pc_active_window"
+
+# Глобальная переменная для хранения логов
+log_messages = []
+
+# Функции для управления ПК
+def shutdown_pc():
+    add_log("Shutting down PC.")
+    os.system("shutdown /s /t 1")
+
+def sleep_pc():
+    add_log("Putting PC to sleep.")
+    os.system("shutdown /h")
+
+def OFF():
+    add_log("OFF function triggered.")
+    active_window = gw.getActiveWindow()
+    if active_window:
+        window_title = active_window.title
+        add_log(f"Active window: {window_title}")
+
+        if "music.apple.com" in window_title:
+            add_log("Detected music.apple.com window.")
+            keyboard.press("space")
+            time.sleep(0.1)
+            keyboard.release("space")
+            keyboard.press("F1")
+            time.sleep(1)
+            keyboard.release("F1")
+        elif "YouTube" in window_title:
+            add_log("Detected YouTube window.")
+            keyboard.press("space")
+            time.sleep(0.1)
+            keyboard.release("space")
+            keyboard.press("F1")
+            time.sleep(1)
+            keyboard.release("F1")
+        else:
+            add_log("Window does not match conditions.")
+    else:
+        add_log("No active window found.")
+
+# Callback на успешное подключение
+def on_connect(client, userdata, flags, rc):
+    if rc == 0:
+        add_log("Connected to MQTT broker successfully.")
+        client.subscribe("home/pc/commands")
+    else:
+        add_log(f"Error connecting to broker, code: {rc}")
+
+# Callback на получение сообщений
+def on_message(client, userdata, msg):
+    command = msg.payload.decode()
+    add_log(f"Received command: {command}")
+
+    if command == "shutdown":
+        shutdown_pc()
+    elif command == "sleep":
+        sleep_pc()
+    elif command == "wake_up":
+        add_log("Wake up PC command received.")
+    elif command == "OFF":
+        OFF()
+    else:
+        add_log("Unknown command received.")
+
+# Функция для отправки активного окна
+def publish_active_window(client):
+    add_log("Publishing active window status.")
+    while True:
+        active_window = gw.getActiveWindow()
+        if active_window:
+            window_title = active_window.title
+            if "Яндекс" in window_title:
+                window_title = "Яндекс"
+            client.publish(f"home/pc/status/{SENSOR_ACTIVE_WINDOW_ID}", window_title)
+            add_log(f"Active window: {window_title}")
+        else:
+            client.publish(f"home/pc/status/{SENSOR_ACTIVE_WINDOW_ID}", "Нет активного окна")
+            add_log("No active window.")
+        time.sleep(5)
+
+# Функция для добавления сообщения в лог
+def add_log(message):
+    log_messages.append(message)
+    if len(log_messages) > 100:  # Оставляем последние 100 сообщений
+        log_messages.pop(0)
+
+# Создаем окно для отображения логов
+def show_log_window():
+    root = tk.Tk()
+    root.title("Logs")
+    root.geometry("600x400")
+    root.configure(bg="black")
+
+    text = Text(root, wrap="word", bg="black", fg="white", font=("Arial", 12))
+    text.pack(expand=True, fill="both")
+    text.insert(END, "Logs:\n")
+    text.config(state="disabled")
+
+    scrollbar = Scrollbar(root, command=text.yview)
+    scrollbar.pack(side="right", fill="y")
+    text.config(yscrollcommand=scrollbar.set)
+
+    def update_log_window():
+        text.config(state="normal")
+        text.delete(1.0, END)
+        text.insert(END, "\n".join(log_messages))
+        text.config(state="disabled")
+        root.after(1000, update_log_window)
+
+    def on_close():
+        root.destroy()
+
+    root.protocol("WM_DELETE_WINDOW", on_close)
+    root.after(1000, update_log_window)
+    root.mainloop()
+
+# Функция для запуска трея
+def create_tray_icon():
+    icon_image = Image.open("icon.png")
+    icon = Icon("app_icon", icon_image, menu=Menu(MenuItem("Open Log Window", show_log_window), MenuItem("Quit", on_quit)))
+    icon.run()
+
+def on_quit(icon, item):
+    add_log("Quitting application.")
+    icon.stop()
+
+# Основная логика
+def main():
+    client = mqtt.Client(CLIENT_ID)
+    client.username_pw_set(USERNAME, PASSWORD)
+    client.on_connect = on_connect
+    client.on_message = on_message
+
+    try:
+        client.connect(BROKER, PORT, 60)
+        client.loop_start()
+
+        create_tray_icon()  # Запуск иконки трея
+
+        publish_active_window(client)
+
+    except KeyboardInterrupt:
+        add_log("Application closed by user.")
+    except Exception as e:
+        add_log(f"Error: {e}")
+    finally:
+        client.loop_stop()
+        client.disconnect()
+
+if __name__ == "__main__":
+    main()
