@@ -63,7 +63,7 @@ pip install -r requirements.txt
 #### Примечания:
 
  **Платформа**: Код разработан для Windows, так как использует команды `os.system` для управления питанием и библиотеку `pygetwindow`.
-**ВАЖНО**: Если код не работает из-за ошибки синтаксиса замените в строке 51 elif на if
 
-**БЕТА BUILD ВЕРСИЯ ДОСТУПНА НА:** https://pixeltoo.ru/html/project.php
+
+**БЕТА BUILD ВЕРСИЯ ДОСТУПНА НА:** https://futureminds.pixeltoo.ru/project.php
 
